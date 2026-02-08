@@ -16,7 +16,7 @@ interface LoopConfig {
   user: string;
   working: string;
   persistent: string;
-  monitor: { command: string; interval: number } | null;
+  monitor: { command: string } | null;
   interval: number;
   maxIterations: number;
   autoApprove: boolean;
@@ -62,7 +62,6 @@ let opencodeServer: Awaited<ReturnType<typeof createOpencodeServer>> | null =
   null;
 let opencodeClient: ReturnType<typeof createOpencodeClient> | null = null;
 let loopAbort: AbortController | null = null;
-let monitorAbort: AbortController | null = null;
 
 const clients = new Set<ReadableStreamDefaultController<Uint8Array>>();
 
@@ -94,23 +93,20 @@ async function sleep(ms: number) {
 
 async function runMonitor() {
   if (!config.monitor) return;
-  const { command, interval } = config.monitor;
-  monitorAbort = new AbortController();
+  const { command } = config.monitor;
 
-  while (!monitorAbort.signal.aborted) {
-    try {
-      const proc = Bun.spawn(["sh", "-c", command], {
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-      const output = await new Response(proc.stdout).text();
-      const stderr = await new Response(proc.stderr).text();
-      state.monitorOutput = output + (stderr ? `\n[stderr]\n${stderr}` : "");
-      broadcast({ type: "monitor", output: state.monitorOutput });
-    } catch (err) {
-      state.monitorOutput = `Error running monitor: ${err}`;
-    }
-    await sleep(interval);
+  try {
+    const proc = Bun.spawn(["sh", "-c", command], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const output = await new Response(proc.stdout).text();
+    const stderr = await new Response(proc.stderr).text();
+    state.monitorOutput = output + (stderr ? `\n[stderr]\n${stderr}` : "");
+    broadcast({ type: "monitor", output: state.monitorOutput });
+  } catch (err) {
+    state.monitorOutput = `Error running monitor: ${err}`;
+    broadcast({ type: "monitor", output: state.monitorOutput });
   }
 }
 
@@ -133,6 +129,9 @@ async function runLoop() {
 
     state.iteration++;
     broadcast({ type: "iteration", iteration: state.iteration });
+
+    // Run monitor command before each iteration
+    await runMonitor();
 
     const session = await opencodeClient.session.create();
     if (!session.data) {
@@ -317,9 +316,6 @@ const server = Bun.serve({
     if (path === "/api/start" && req.method === "POST") {
       if (!state.running) {
         runLoop().catch(console.error);
-        if (config.monitor) {
-          runMonitor().catch(console.error);
-        }
       }
       return Response.json({ ok: true }, { headers });
     }
@@ -327,7 +323,6 @@ const server = Bun.serve({
     if (path === "/api/stop" && req.method === "POST") {
       state.running = false;
       loopAbort?.abort();
-      monitorAbort?.abort();
       return Response.json({ ok: true }, { headers });
     }
 

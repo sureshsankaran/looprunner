@@ -352,10 +352,7 @@
               <div class="form-group">
                 <label>Command</label>
                 <input type="text" id="monitorCommand" placeholder="e.g., tail -n 20 /var/log/app.log" />
-              </div>
-              <div class="form-group">
-                <label>Interval (ms)</label>
-                <input type="number" id="monitorInterval" value="10000" min="1000" />
+                <div class="help-text">Runs before each iteration</div>
               </div>
             </div>
 
@@ -467,7 +464,6 @@
       const interval = $("interval")
       const maxIterations = $("maxIterations")
       const monitorCommand = $("monitorCommand")
-      const monitorInterval = $("monitorInterval")
       const workingMemory = $("workingMemory")
       const persistentMemory = $("persistentMemory")
       const startBtn = $("startBtn")
@@ -634,7 +630,6 @@
         persistentMemory.value = config.persistent || ""
         if (config.monitor) {
           monitorCommand.value = config.monitor.command || ""
-          monitorInterval.value = config.monitor.interval || 10000
         }
         loadModels()
       }
@@ -658,10 +653,7 @@
           interval: parseInt(interval.value) || 5000,
           maxIterations: parseInt(maxIterations.value) || 0,
           monitor: monitorCommand.value
-            ? {
-                command: monitorCommand.value,
-                interval: parseInt(monitorInterval.value) || 10000,
-              }
+            ? { command: monitorCommand.value }
             : null,
         }
 
